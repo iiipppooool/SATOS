@@ -1,0 +1,628 @@
+// SAT OS data model.
+//
+// Portability note: this schema deliberately avoids native enums and scalar
+// list columns so that the *same* file works on SQLite (zero-config local dev)
+// and on PostgreSQL / Supabase in production. To move to Postgres, change the
+// provider below to "postgresql", swap the driver adapter in src/lib/db.ts,
+// and point DATABASE_URL at your instance -- no model changes are required.
+//
+// Enum-like columns are plain Strings. SQLite does not enforce enum values at
+// the database level anyway, so the single source of truth for allowed values
+// is the Zod schema in src/lib/domain/enums.ts, which validates at every
+// write boundary. Scalar lists (String[]) are unsupported on SQLite, so list
+// fields are stored as JSON text and parsed through typed helpers.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         String   @default("student") // student | admin
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  settings      UserSettings?
+  attempts      Attempt[]
+  sessions      PracticeSession[]
+  skillMastery  SkillMastery[]
+  questionCards QuestionCard[]
+  errorLog      ErrorLogEntry[]
+  plans         StudyPlan[]
+  examAttempts  ExamAttempt[]
+  collections   QuestionCollection[]
+  tutorThreads  TutorThread[]
+  snapshots     ScoreSnapshot[]
+  importBatches ImportBatch[]
+  authoredQuestions Question[] @relation("QuestionAuthor")
+
+  @@index([email])
+}
+
+model UserSettings {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  theme            String   @default("dark")   // dark | light | system
+  targetScore      Int      @default(1550)
+  testDate         DateTime?
+  dailyMinutes     Int      @default(105)
+  studyDaysPerWeek Int      @default(6)
+  timezone         String   @default("Europe/London")
+
+  // AI provider is configurable so the underlying model can change without
+  // touching application code. See src/lib/ai/.
+  aiProvider String  @default("anthropic") // anthropic | openai | none
+  aiModel    String?
+  aiEnabled  Boolean @default(true)
+
+  // Pattern-recognition trainer tuning.
+  recognitionTimeoutSec Int @default(20)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// SAT taxonomy: Section -> Domain -> Skill
+// ---------------------------------------------------------------------------
+
+model Domain {
+  id      String @id              // stable slug, e.g. "algebra"
+  section String                  // reading_writing | math
+  name    String
+  // Share of the section's operational questions, per the College Board
+  // digital SAT assessment specification. Used to weight score estimates.
+  weight  Float
+  order   Int
+
+  skills Skill[]
+
+  @@unique([section, name])
+  @@index([section])
+}
+
+model Skill {
+  id       String @id            // stable slug, e.g. "linear-equations-one-variable"
+  domainId String
+  domain   Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  name     String
+  // Short description of what the skill tests, shown in the weakness detector.
+  blurb    String?
+  order    Int
+
+  questions   Question[]
+  mastery     SkillMastery[]
+  assignments Assignment[]
+
+  @@index([domainId])
+}
+
+// ---------------------------------------------------------------------------
+// Questions
+// ---------------------------------------------------------------------------
+
+model Question {
+  id      String @id @default(cuid())
+  skillId String
+  skill   Skill  @relation(fields: [skillId], references: [id])
+  section String // reading_writing | math
+
+  // mcq = four options; spr = student-produced response (type-in).
+  format String @default("mcq")
+
+  // Shared stimulus (a passage, table or scenario). Null for most maths items.
+  stimulus      String?
+  stimulusTitle String?
+  stem          String
+
+  // SPR accepted answers, JSON array of strings, e.g. ["7","7.0"].
+  acceptedAnswers String?
+
+  // 1 = easiest ... 5 = hardest, as authored. calibratedDifficulty is learned
+  // from aggregate attempt data and overrides it for adaptive selection.
+  difficulty           Int
+  calibratedDifficulty Float?
+
+  explanation String
+
+  // --- Pattern recognition payload ---------------------------------------
+  // The core differentiator: every item carries an explicit recognition
+  // fingerprint so the trainer can drill "what is this?" separately from
+  // "solve it".
+  patternName       String?
+  concept           String?
+  recognitionCues   String? // JSON array of strings
+  fastestMethod     String?
+  alternativeMethod String?
+  commonTraps       String? // JSON array of strings
+  relatedConcepts   String? // JSON array of skill ids
+  expectedSeconds   Int     @default(75)
+
+  // --- Provenance ---------------------------------------------------------
+  // SAT OS never presents unverified material as an official exam paper.
+  // source is one of: original_authored | official_practice | user_imported
+  //                 | ai_generated | third_party | recalled_unverified
+  source        String  @default("original_authored")
+  sourceRef     String? // e.g. "Official SAT Practice Test 4, Module 2, Q12"
+  sourceUrl     String?
+  licenceNote   String?
+  verified      Boolean @default(false)
+  // True when the body text is reproduced from a copyrighted source and is
+  // therefore stored only in the owner's private instance.
+  restrictedText Boolean @default(false)
+  testAdministration String? // e.g. "2026-10" when, and only when, verified
+
+  authorId String?
+  author   User?   @relation("QuestionAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  importBatchId String?
+  importBatch   ImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+
+  // Set when generated by the AI tutor as a variant of another item.
+  parentQuestionId String?
+  parentQuestion   Question?  @relation("QuestionVariants", fields: [parentQuestionId], references: [id], onDelete: SetNull)
+  variants         Question[] @relation("QuestionVariants")
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  choices         Choice[]
+  attempts        Attempt[]
+  cards           QuestionCard[]
+  errorLog        ErrorLogEntry[]
+  collectionItems CollectionItem[]
+  tutorThreads    TutorThread[]
+  examItems       ExamItem[]
+
+  @@index([skillId])
+  @@index([section, difficulty])
+  @@index([source])
+  @@index([active])
+}
+
+model Choice {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  label     String  // A | B | C | D
+  text      String
+  isCorrect Boolean @default(false)
+
+  // Why a student picks this wrong answer. Powers trap analysis.
+  // e.g. sign_error | partial_solution | off_by_one | plausible_paraphrase
+  distractorType String?
+  rationale      String?
+  order          Int
+
+  attempts Attempt[]
+
+  @@unique([questionId, label])
+  @@index([questionId])
+}
+
+// ---------------------------------------------------------------------------
+// Practice and attempts
+// ---------------------------------------------------------------------------
+
+model PracticeSession {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // drill | pattern_trainer | review | weakness | exam | assignment
+  kind   String
+  label  String?
+  config String? // JSON snapshot of the generator inputs
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  questionCount Int @default(0)
+  correctCount  Int @default(0)
+  totalTimeMs   Int @default(0)
+
+  attempts     Attempt[]
+  assignment   Assignment?
+  examAttempt  ExamAttempt?
+
+  @@index([userId, startedAt])
+  @@index([userId, kind])
+}
+
+model Attempt {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  sessionId String?
+  session   PracticeSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  choiceId String?
+  choice   Choice? @relation(fields: [choiceId], references: [id], onDelete: SetNull)
+
+  // Typed answer for SPR items, or the raw text the student entered.
+  answerText String?
+  isCorrect  Boolean
+  skipped    Boolean @default(false)
+
+  // Two clocks, tracked separately. recognitionMs is the time until the
+  // student commits to an approach; solveMs is the rest.
+  recognitionMs Int?
+  solveMs       Int?
+  totalMs       Int
+
+  // In the pattern trainer the student first names the pattern.
+  patternGuess        String?
+  patternGuessCorrect Boolean?
+
+  confidence String? // guess | unsure | confident
+  flagged    Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  errorLog ErrorLogEntry[]
+
+  @@index([userId, createdAt])
+  @@index([userId, questionId])
+  @@index([questionId])
+  @@index([sessionId])
+}
+
+// ---------------------------------------------------------------------------
+// Adaptive scheduling (SM-2 derived, see src/lib/domain/scheduling.ts)
+// ---------------------------------------------------------------------------
+
+model SkillMastery {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skillId String
+  skill   Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  attempts        Int   @default(0)
+  correct         Int   @default(0)
+  // Exponentially weighted recent accuracy, 0..1. Reacts faster than the
+  // lifetime ratio, which is what you want when a weakness is being fixed.
+  recentAccuracy  Float @default(0)
+  avgSolveMs      Int   @default(0)
+  avgRecognitionMs Int  @default(0)
+  patternHitRate  Float @default(0)
+
+  // 0..100, blends accuracy, speed and difficulty reached.
+  mastery Float @default(0)
+
+  intervalDays Float    @default(0)
+  easeFactor   Float    @default(2.5)
+  repetitions  Int      @default(0)
+  dueAt        DateTime?
+  lastSeenAt   DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, skillId])
+  @@index([userId, mastery])
+  @@index([userId, dueAt])
+}
+
+// Per-question spaced repetition, used to reintroduce items you got wrong.
+model QuestionCard {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  intervalDays Float    @default(0)
+  easeFactor   Float    @default(2.5)
+  repetitions  Int      @default(0)
+  lapses       Int      @default(0)
+  dueAt        DateTime
+  lastGrade    Int?
+  retired      Boolean  @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, questionId])
+  @@index([userId, dueAt, retired])
+}
+
+// ---------------------------------------------------------------------------
+// Error log
+// ---------------------------------------------------------------------------
+
+model ErrorLogEntry {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  attemptId  String?
+  attempt    Attempt? @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+
+  // concept_gap | misread | careless_arithmetic | trap_choice | time_pressure
+  // | guessed | notation | ran_out_of_time | unknown
+  category String
+  note     String?
+
+  resolved   Boolean   @default(false)
+  resolvedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, resolved])
+  @@index([userId, category])
+}
+
+// ---------------------------------------------------------------------------
+// Study plan
+// ---------------------------------------------------------------------------
+
+model StudyPlan {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name       String
+  startDate  DateTime
+  testDate   DateTime
+  daysPerWeek Int
+  minutesPerDay Int
+  targetScore Int
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  days PlanDay[]
+
+  @@index([userId, active])
+}
+
+model PlanDay {
+  id     String    @id @default(cuid())
+  planId String
+  plan   StudyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  date          DateTime
+  weekIndex     Int
+  dayIndex      Int
+  // drill | review | mixed | full_exam | module_exam | rest | final_review
+  focus         String
+  theme         String?
+  targetMinutes Int
+  // pending | in_progress | done | skipped
+  status        String   @default("pending")
+  completedAt   DateTime?
+
+  assignments Assignment[]
+
+  @@unique([planId, date])
+  @@index([planId, date])
+}
+
+model Assignment {
+  id        String  @id @default(cuid())
+  planDayId String
+  planDay   PlanDay @relation(fields: [planDayId], references: [id], onDelete: Cascade)
+
+  // drill | pattern_trainer | review | weakness | module_exam | full_exam
+  kind          String
+  title         String
+  skillId       String?
+  skill         Skill?  @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  questionCount Int     @default(10)
+  targetMinutes Int     @default(15)
+  order         Int     @default(0)
+
+  status      String    @default("pending") // pending | done | skipped
+  completedAt DateTime?
+
+  sessionId String?          @unique
+  session   PracticeSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([planDayId])
+}
+
+// ---------------------------------------------------------------------------
+// Exam simulator
+// ---------------------------------------------------------------------------
+
+model ExamAttempt {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessionId String?          @unique
+  session   PracticeSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  label String
+  // full = 2 RW modules + 2 Math modules; rw_only; math_only; single_module
+  shape String @default("full")
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  abandoned  Boolean   @default(false)
+
+  rwRaw     Int?
+  mathRaw   Int?
+  rwScaled  Int?
+  mathScaled Int?
+  total     Int?
+
+  modules ExamModule[]
+
+  @@index([userId, startedAt])
+}
+
+model ExamModule {
+  id            String      @id @default(cuid())
+  examAttemptId String
+  examAttempt   ExamAttempt @relation(fields: [examAttemptId], references: [id], onDelete: Cascade)
+
+  // rw1 | rw2 | math1 | math2
+  slot    String
+  section String
+  // routing = first module, everyone sees the same mix.
+  // easy | hard = second-module tier chosen by performance on the first.
+  tier    String
+  order   Int
+
+  durationSec Int
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  rawCorrect  Int       @default(0)
+
+  items ExamItem[]
+
+  @@unique([examAttemptId, slot])
+  @@index([examAttemptId])
+}
+
+model ExamItem {
+  id       String     @id @default(cuid())
+  moduleId String
+  module   ExamModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  order      Int
+
+  // Answers are recorded here during the exam, then converted to Attempt rows
+  // on submission so that analytics sees exam work like any other practice.
+  choiceId   String?
+  answerText String?
+  isCorrect  Boolean?
+  flagged    Boolean  @default(false)
+  timeMs     Int      @default(0)
+
+  @@unique([moduleId, order])
+  @@index([moduleId])
+}
+
+// ---------------------------------------------------------------------------
+// Collections, tutor, analytics, imports
+// ---------------------------------------------------------------------------
+
+model QuestionCollection {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  // true for the built-in "Starred" and "Needs another look" collections.
+  system      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  items CollectionItem[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model CollectionItem {
+  id           String             @id @default(cuid())
+  collectionId String
+  collection   QuestionCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  note         String?
+  addedAt      DateTime           @default(now())
+
+  @@unique([collectionId, questionId])
+  @@index([collectionId])
+}
+
+model TutorThread {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  questionId String?
+  question   Question? @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  title     String
+  // explain | why_wrong | similar | harder | shortcut | mistake_review | free
+  intent    String   @default("free")
+  provider  String?
+  model     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages TutorMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model TutorMessage {
+  id       String      @id @default(cuid())
+  threadId String
+  thread   TutorThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  role      String // user | assistant | system
+  content   String
+  tokensIn  Int?
+  tokensOut Int?
+  createdAt DateTime @default(now())
+
+  @@index([threadId, createdAt])
+}
+
+model ScoreSnapshot {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  takenAt DateTime @default(now())
+  // Always an estimate derived from practice accuracy, never a reported score.
+  // source: practice_estimate | exam_simulator | official_reported
+  source  String   @default("practice_estimate")
+
+  rwScaled   Int
+  mathScaled Int
+  total      Int
+  lowerBound Int
+  upperBound Int
+  sampleSize Int
+
+  @@index([userId, takenAt])
+}
+
+model ImportBatch {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  source      String  // which of the Question.source values the rows carry
+  sourceRef   String?
+  licenceNote String?
+  notes       String?
+
+  rowsSeen     Int @default(0)
+  rowsImported Int @default(0)
+  rowsRejected Int @default(0)
+  report       String? // JSON array of per-row validation errors
+
+  createdAt DateTime @default(now())
+
+  questions Question[]
+
+  @@index([userId, createdAt])
+}
