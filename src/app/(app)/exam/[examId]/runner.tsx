@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Flag, Timer } from "lucide-react";
+import { AlertTriangle, BookOpen, Flag, Timer } from "lucide-react";
 import {
   abandonExamAction,
   markModuleStartedAction,
@@ -10,7 +10,10 @@ import {
   submitModuleAction,
 } from "../actions";
 import { Badge, Button, Card, CardBody, Notice } from "@/components/ui";
-import { Stimulus } from "@/components/stimulus";
+import { HighlightablePassage } from "@/components/highlightable";
+import { AnswerChoices } from "@/components/answer-choices";
+import { ReferenceSheet } from "@/components/reference-sheet";
+import { KEY_HINTS, useAnswerKeys } from "@/lib/use-answer-keys";
 import { cn } from "@/lib/cn";
 
 export interface ExamItemView {
@@ -80,6 +83,8 @@ export function ExamRunner({
   const [remaining, setRemaining] = useState(durationSec);
   const [submitting, setSubmitting] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
+  const [eliminated, setEliminated] = useState<Record<string, string[]>>({});
+  const [showReference, setShowReference] = useState(false);
   // Set on mount, not during render: reading the clock while rendering is
   // impure and would be recomputed on every re-render.
   const questionEnteredAt = useRef<number>(0);
@@ -174,6 +179,37 @@ export function ExamRunner({
     setIndex(Math.min(items.length - 1, Math.max(0, nextIndex)));
     setShowGrid(false);
   }
+
+  const selectByLabel = (label: string) => {
+    if (!current || current.format !== "mcq") return;
+    const choice = current.choices.find((c) => c.label === label);
+    if (!choice) return;
+    if ((eliminated[current.id] ?? []).includes(choice.id)) return;
+    choose(current.id, choice.id);
+  };
+
+  const eliminateByLabel = (label: string) => {
+    if (!current || current.format !== "mcq") return;
+    const choice = current.choices.find((c) => c.label === label);
+    if (!choice) return;
+    setEliminated((currentMap) => {
+      const list = currentMap[current.id] ?? [];
+      const nextList = list.includes(choice.id)
+        ? list.filter((value) => value !== choice.id)
+        : [...list, choice.id];
+      return { ...currentMap, [current.id]: nextList };
+    });
+  };
+
+  useAnswerKeys({
+    enabled: started && Boolean(current),
+    onSelectLabel: selectByLabel,
+    onEliminateLabel: eliminateByLabel,
+    onNext: current && index + 1 < items.length ? () => goTo(index + 1) : undefined,
+    onFlag: current ? () => toggleFlag(current.id) : undefined,
+    onToggleReference:
+      current && current.format !== undefined ? () => setShowReference((value) => !value) : undefined,
+  });
 
   if (!started) {
     return (
@@ -285,6 +321,16 @@ export function ExamRunner({
             </span>
             <Button
               type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowReference(true)}
+              title="Formula reference (R)"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Reference
+            </Button>
+            <Button
+              type="button"
               variant="secondary"
               size="sm"
               onClick={() => setShowGrid((value) => !value)}
@@ -336,7 +382,11 @@ export function ExamRunner({
       <Card>
         <CardBody className="space-y-4">
           {current.stimulus ? (
-            <Stimulus title={current.stimulusTitle} text={current.stimulus} />
+            <HighlightablePassage
+              key={current.id}
+              title={current.stimulusTitle}
+              text={current.stimulus}
+            />
           ) : null}
 
           <div className="flex items-start justify-between gap-3">
@@ -359,34 +409,28 @@ export function ExamRunner({
           </div>
 
           {current.format === "mcq" ? (
-            <div className="space-y-2">
-              {current.choices.map((choice) => {
-                const selected = answer?.choiceId === choice.id;
-                return (
-                  <button
-                    key={choice.id}
-                    type="button"
-                    onClick={() => choose(current.id, choice.id)}
-                    className={cn(
-                      "flex w-full items-start gap-3 rounded-[var(--radius-control)] border px-3.5 py-3 text-left transition-colors",
-                      selected ? "border-accent bg-accent-soft" : "hover:bg-surface-hover",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
-                        selected
-                          ? "border-accent bg-accent text-accent-contrast"
-                          : "text-text-muted",
-                      )}
-                    >
-                      {choice.label}
-                    </span>
-                    <span className="text-sm leading-relaxed text-text-base">{choice.text}</span>
-                  </button>
-                );
-              })}
-            </div>
+            <AnswerChoices
+              choices={current.choices}
+              selectedId={answer?.choiceId ?? null}
+              eliminated={new Set(eliminated[current.id] ?? [])}
+              onSelect={(id) => choose(current.id, id)}
+              onToggleEliminate={(id) =>
+                setEliminated((currentMap) => {
+                  const list = currentMap[current.id] ?? [];
+                  const nextList = list.includes(id)
+                    ? list.filter((value) => value !== id)
+                    : [...list, id];
+                  if (!list.includes(id) && answer?.choiceId === id) {
+                    // Crossing out the selected option clears the selection.
+                    setAnswers((answersMap) => ({
+                      ...answersMap,
+                      [current.id]: { choiceId: null, text: "" },
+                    }));
+                  }
+                  return { ...currentMap, [current.id]: nextList };
+                })
+              }
+            />
           ) : (
             <div className="space-y-2">
               <label
@@ -445,9 +489,30 @@ export function ExamRunner({
         </div>
       </div>
 
+      <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] text-text-subtle">
+        {KEY_HINTS.filter((h) => h.action !== "submit").map((hint) => (
+          <span key={hint.keys}>
+            <kbd className="rounded border px-1 py-0.5 font-mono text-[9px] text-text-muted">
+              {hint.keys}
+            </kbd>{" "}
+            {hint.action}
+          </span>
+        ))}
+        <span>
+          <kbd className="rounded border px-1 py-0.5 font-mono text-[9px] text-text-muted">F</kbd>{" "}
+          flag
+        </span>
+        <span>
+          <kbd className="rounded border px-1 py-0.5 font-mono text-[9px] text-text-muted">R</kbd>{" "}
+          reference
+        </span>
+      </p>
+
       <p className="text-center text-[11px] text-text-subtle">
         Answers save as you go. Submitting a module is final, exactly as on the real test.
       </p>
+
+      {showReference ? <ReferenceSheet onClose={() => setShowReference(false)} /> : null}
       </div>
     </div>
   );

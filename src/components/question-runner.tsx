@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
+  BookOpen,
   Check,
   Eye,
   Flag,
@@ -21,7 +22,6 @@ import {
   type AnswerResult,
 } from "@/app/(app)/practice/actions";
 import {
-  DISTRACTOR_TYPE_LABEL,
   ERROR_CATEGORY_FIX,
   ERROR_CATEGORY_LABEL,
   SECTION_LABEL,
@@ -29,7 +29,10 @@ import {
   type ErrorCategory,
 } from "@/lib/domain/enums";
 import { Badge, Button, Card, CardBody, Divider, Notice, ProgressBar } from "@/components/ui";
-import { Stimulus } from "@/components/stimulus";
+import { HighlightablePassage } from "@/components/highlightable";
+import { AnswerChoices } from "@/components/answer-choices";
+import { ReferenceSheet } from "@/components/reference-sheet";
+import { KEY_HINTS, useAnswerKeys } from "@/lib/use-answer-keys";
 import { cn } from "@/lib/cn";
 
 const ERROR_CATEGORIES: ErrorCategory[] = [
@@ -93,6 +96,8 @@ export function QuestionRunner({
   const [starred, setStarred] = useState(initialStarred);
   const [classified, setClassified] = useState<ErrorCategory | null>(null);
   const [showPattern, setShowPattern] = useState(false);
+  const [eliminated, setEliminated] = useState<Set<string>>(() => new Set());
+  const [showReference, setShowReference] = useState(false);
 
   /*
    * Per-question state is reset by remounting, not by an effect: the session
@@ -120,12 +125,6 @@ export function QuestionRunner({
   const overTime = elapsed > expectedMs;
 
   const reveal: QuestionReveal | undefined = result?.reveal;
-
-  const revealByChoice = useMemo(() => {
-    const map = new Map<string, QuestionReveal["choices"][number]>();
-    for (const choice of reveal?.choices ?? []) map.set(choice.id, choice);
-    return map;
-  }, [reveal]);
 
   const commitRecognition = useCallback(() => {
     if (recognisedAt.current === null) {
@@ -191,6 +190,43 @@ export function QuestionRunner({
   const answerable =
     question.format === "mcq" ? selectedChoice !== null : typed.trim().length > 0;
 
+  const selectByLabel = useCallback(
+    (label: string) => {
+      const choice = question.choices.find((c) => c.label === label);
+      if (!choice || eliminated.has(choice.id)) return;
+      setSelectedChoice(choice.id);
+    },
+    [eliminated, question.choices],
+  );
+
+  const eliminateByLabel = useCallback(
+    (label: string) => {
+      const choice = question.choices.find((c) => c.label === label);
+      if (!choice) return;
+      setEliminated((current) => {
+        const nextSet = new Set(current);
+        if (nextSet.has(choice.id)) nextSet.delete(choice.id);
+        else {
+          nextSet.add(choice.id);
+          setSelectedChoice((selected) => (selected === choice.id ? null : selected));
+        }
+        return nextSet;
+      });
+    },
+    [question.choices],
+  );
+
+  useAnswerKeys({
+    enabled: question.format === "mcq" || stage === "revealed",
+    onSelectLabel: stage === "solve" ? selectByLabel : undefined,
+    onEliminateLabel: stage === "solve" ? eliminateByLabel : undefined,
+    onSubmit:
+      stage === "solve" && answerable && !submitting ? () => void submit() : undefined,
+    onNext: stage === "revealed" ? next : undefined,
+    onToggleReference:
+      question.section === "math" ? () => setShowReference((value) => !value) : undefined,
+  });
+
   async function onStar() {
     const response = await toggleStarAction(question.id);
     setStarred(response.starred);
@@ -235,7 +271,10 @@ export function QuestionRunner({
       <Card>
         <CardBody className="space-y-4">
           {question.stimulus ? (
-            <Stimulus title={question.stimulusTitle} text={question.stimulus} />
+            <HighlightablePassage
+              title={question.stimulusTitle}
+              text={question.stimulus}
+            />
           ) : null}
 
           <p className="text-sm leading-relaxed text-text-base">{question.stem}</p>
@@ -292,71 +331,30 @@ export function QuestionRunner({
           {stage !== "recognise" ? (
             <div className="space-y-2">
               {question.format === "mcq" ? (
-                question.choices.map((choice) => {
-                  const revealed = revealByChoice.get(choice.id);
-                  const isSelected = selectedChoice === choice.id;
-                  const isCorrect = revealed?.isCorrect === true;
-                  const showWrong = stage === "revealed" && isSelected && !isCorrect;
-
-                  return (
-                    <button
-                      key={choice.id}
-                      type="button"
-                      disabled={stage === "revealed"}
-                      onClick={() => setSelectedChoice(choice.id)}
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-[var(--radius-control)] border px-3.5 py-3 text-left transition-colors",
-                        stage === "revealed"
-                          ? isCorrect
-                            ? "border-[var(--correct)] bg-correct-soft"
-                            : showWrong
-                              ? "border-[var(--wrong)] bg-wrong-soft"
-                              : "opacity-60"
-                          : isSelected
-                            ? "border-accent bg-accent-soft"
-                            : "hover:bg-surface-hover",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold",
-                          stage === "revealed" && isCorrect
-                            ? "border-[var(--correct)] bg-correct text-accent-contrast"
-                            : showWrong
-                              ? "border-[var(--wrong)] bg-wrong text-accent-contrast"
-                              : isSelected
-                                ? "border-accent bg-accent text-accent-contrast"
-                                : "text-text-muted",
-                        )}
-                      >
-                        {stage === "revealed" && isCorrect ? (
-                          <Check className="h-3 w-3" />
-                        ) : showWrong ? (
-                          <X className="h-3 w-3" />
-                        ) : (
-                          choice.label
-                        )}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm leading-relaxed text-text-base">
-                          {choice.text}
-                        </span>
-                        {stage === "revealed" && revealed?.rationale ? (
-                          <span className="mt-1.5 block text-[11px] leading-relaxed text-text-muted">
-                            {revealed.distractorType ? (
-                              <span className="font-medium text-text-subtle">
-                                {DISTRACTOR_TYPE_LABEL[revealed.distractorType] ??
-                                  revealed.distractorType}
-                                {": "}
-                              </span>
-                            ) : null}
-                            {revealed.rationale}
-                          </span>
-                        ) : null}
-                      </span>
-                    </button>
-                  );
-                })
+                <AnswerChoices
+                  choices={question.choices}
+                  selectedId={selectedChoice}
+                  eliminated={eliminated}
+                  reveal={reveal?.choices.map((c) => ({
+                    id: c.id,
+                    isCorrect: c.isCorrect,
+                    distractorType: c.distractorType,
+                    rationale: c.rationale,
+                  }))}
+                  disabled={stage === "revealed"}
+                  onSelect={setSelectedChoice}
+                  onToggleEliminate={(id) =>
+                    setEliminated((current) => {
+                      const next = new Set(current);
+                      if (next.has(id)) next.delete(id);
+                      else {
+                        next.add(id);
+                        if (selectedChoice === id) setSelectedChoice(null);
+                      }
+                      return next;
+                    })
+                  }
+                />
               ) : (
                 <div className="space-y-2">
                   <label
@@ -477,6 +475,18 @@ export function QuestionRunner({
                 <Star className={cn("h-3.5 w-3.5", starred && "fill-current text-warning")} />
                 {starred ? "Starred" : "Star"}
               </Button>
+              {question.section === "math" ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowReference(true)}
+                  title="Formula reference (R)"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  Reference
+                </Button>
+              ) : null}
               {stage === "solve" ? (
                 <Button
                   type="button"
@@ -490,6 +500,19 @@ export function QuestionRunner({
               ) : null}
             </div>
           </div>
+
+          {stage === "solve" && question.format === "mcq" ? (
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-subtle">
+              {KEY_HINTS.map((hint) => (
+                <span key={hint.keys}>
+                  <kbd className="rounded border px-1 py-0.5 font-mono text-[9px] text-text-muted">
+                    {hint.keys}
+                  </kbd>{" "}
+                  {hint.action}
+                </span>
+              ))}
+            </p>
+          ) : null}
 
           {/* A hint reveals recognition cues but never the method or answer. */}
           {showPattern && stage === "solve" && question.pattern.recognitionCues.length > 0 ? (
@@ -665,6 +688,8 @@ export function QuestionRunner({
           </CardBody>
         </Card>
       ) : null}
+
+      {showReference ? <ReferenceSheet onClose={() => setShowReference(false)} /> : null}
     </div>
   );
 }
