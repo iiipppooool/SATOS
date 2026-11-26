@@ -4,6 +4,7 @@ import { ArrowRight, Check, Timer, X } from "lucide-react";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { readSessionConfig } from "@/lib/practice";
+import { analyseSectionPacing, median, type TimedAttempt } from "@/lib/domain/pacing";
 import { SECTION_LABEL, SESSION_KIND_LABEL, type SessionKind } from "@/lib/domain/enums";
 import {
   Badge,
@@ -65,6 +66,26 @@ export default async function SummaryPage({
   const patternHits = patternAttempts.filter((a) => a.patternGuessCorrect === true).length;
 
   const wrong = attempts.filter((a) => !a.isCorrect);
+
+  // Pacing for this session only, so the student sees how this sitting went
+  // rather than their lifetime average.
+  const timed: TimedAttempt[] = attempts
+    .filter((a) => !a.skipped && a.totalMs > 0)
+    .map((a) => ({
+      section: a.question.section as "reading_writing" | "math",
+      skillId: a.question.id,
+      skillName: a.question.skill.name,
+      totalMs: a.totalMs,
+      expectedSeconds: a.question.expectedSeconds,
+      isCorrect: a.isCorrect,
+      difficulty: a.question.difficulty,
+    }));
+
+  const sectionPacing = (["reading_writing", "math"] as const)
+    .map((section) => analyseSectionPacing(timed, section))
+    .filter((p) => p.attempts > 0);
+
+  const medianSeconds = Math.round(median(timed.map((t) => t.totalMs / 1000)));
 
   // Skills seen in this session, so the follow-up drill button is useful.
   const skillCounts = new Map<string, number>();
@@ -164,6 +185,66 @@ export default async function SummaryPage({
           that is what turns into wrong answers elsewhere, so this is a pacing problem rather than a
           knowledge one.
         </Notice>
+      ) : null}
+
+      {sectionPacing.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <div>
+              <CardTitle>Pace in this session</CardTitle>
+              <p className="mt-1 text-xs text-text-muted">
+                Your median here projected onto a real timed module. Median rather than mean, so a
+                single long question does not distort it.
+              </p>
+            </div>
+            <Badge tone="neutral">{medianSeconds}s median</Badge>
+          </CardHeader>
+          <CardBody className="space-y-3 pt-3">
+            {sectionPacing.map((pacing) => (
+              <div
+                key={pacing.section}
+                className="rounded-[var(--radius-control)] border bg-bg-sunken px-3 py-2.5"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-text-base">
+                    {pacing.sectionLabel}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      tone={
+                        pacing.verdict === "on_pace"
+                          ? "correct"
+                          : pacing.verdict === "tight"
+                            ? "warning"
+                            : "wrong"
+                      }
+                    >
+                      {pacing.verdict === "on_pace"
+                        ? "On pace"
+                        : pacing.verdict === "tight"
+                          ? "Tight"
+                          : "Over budget"}
+                    </Badge>
+                    <span className="numeric text-[11px] text-text-muted">
+                      {pacing.medianSeconds}s vs {pacing.targetSeconds}s target
+                    </span>
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-text-muted">
+                  At this pace a {pacing.questionsPerModule}-question module would take about{" "}
+                  {pacing.projectedMinutes} minutes against the {pacing.minutesPerModule} allowed
+                  {pacing.questionsAtRisk > 0
+                    ? `, leaving roughly ${pacing.questionsAtRisk} question${pacing.questionsAtRisk === 1 ? "" : "s"} unreached.`
+                    : "."}
+                </p>
+              </div>
+            ))}
+            <Link href="/analytics" className={buttonClass("ghost", "sm")}>
+              Full pacing report
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </CardBody>
+        </Card>
       ) : null}
 
       <Card>

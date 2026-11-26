@@ -2,10 +2,12 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import {
   getActivitySummary,
+  getPacingReport,
   getScoreEstimate,
   getSectionAccuracy,
   getWeaknesses,
 } from "@/lib/queries";
+import { PacingReportView } from "@/components/pacing-report";
 import { DOMAINS } from "@/lib/domain/taxonomy";
 import { ERROR_CATEGORY_LABEL, SECTION_LABEL, type ErrorCategory } from "@/lib/domain/enums";
 import {
@@ -33,7 +35,7 @@ export const dynamic = "force-dynamic";
 export default async function AnalyticsPage() {
   const user = await requireUser();
 
-  const [estimate, activity, sections, weaknesses, attempts, snapshots, errorsByCategory] =
+  const [estimate, activity, sections, weaknesses, attempts, snapshots, errorsByCategory, pacing] =
     await Promise.all([
       getScoreEstimate(user.id),
       getActivitySummary(user.id),
@@ -69,6 +71,7 @@ export default async function AnalyticsPage() {
         where: { userId: user.id },
         _count: { _all: true },
       }),
+      getPacingReport(user.id),
     ]);
 
   // Accuracy by domain.
@@ -324,6 +327,14 @@ export default async function AnalyticsPage() {
             )}
           </CardBody>
         </Card>
+      </div>
+
+      <div>
+        <h2 className="mb-1 text-sm font-semibold tracking-tight text-text-base">Pacing</h2>
+        <p className="mb-4 max-w-2xl text-xs leading-relaxed text-text-muted">
+          Whether you could actually produce this accuracy inside a real timed module.
+        </p>
+        <PacingReportView report={pacing} />
       </div>
 
       <Card>

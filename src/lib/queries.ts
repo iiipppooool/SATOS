@@ -3,6 +3,14 @@ import { prisma } from "./db";
 import { DOMAINS, ALL_SKILLS } from "./domain/taxonomy";
 import { computeQuestionShares, rankWeaknesses, type SkillStat } from "./domain/weakness";
 import { estimateTotal, type ScoredResponse, type TotalEstimate } from "./domain/scoring";
+import {
+  analyseSectionPacing,
+  analyseSkillPacing,
+  pacingAdvice,
+  type SectionPacing,
+  type SkillPacing,
+  type TimedAttempt,
+} from "./domain/pacing";
 import type { Section } from "./domain/enums";
 
 const SHARES = computeQuestionShares(DOMAINS);
@@ -277,4 +285,57 @@ export function daysUntil(date: Date | null | undefined, now: Date = new Date())
   const a = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const b = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
   return Math.round((b - a) / 86_400_000);
+}
+
+
+export interface PacingReport {
+  sections: Array<SectionPacing & { advice: string }>;
+  skills: SkillPacing[];
+  totalTimedAttempts: number;
+}
+
+/**
+ * Pacing across recent work.
+ *
+ * Only non-skipped attempts count: a skipped question records no thinking
+ * time, and including it would flatter the median.
+ */
+export async function getPacingReport(userId: string): Promise<PacingReport> {
+  const rows = await prisma.attempt.findMany({
+    where: { userId, skipped: false, totalMs: { gt: 0 } },
+    orderBy: { createdAt: "desc" },
+    take: 400,
+    select: {
+      totalMs: true,
+      isCorrect: true,
+      question: {
+        select: {
+          section: true,
+          difficulty: true,
+          expectedSeconds: true,
+          skillId: true,
+          skill: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  const attempts: TimedAttempt[] = rows.map((row) => ({
+    section: row.question.section as Section,
+    skillId: row.question.skillId,
+    skillName: row.question.skill.name,
+    totalMs: row.totalMs,
+    expectedSeconds: row.question.expectedSeconds,
+    isCorrect: row.isCorrect,
+    difficulty: row.question.difficulty,
+  }));
+
+  const skills = analyseSkillPacing(attempts, SHARES);
+
+  const sections = (["reading_writing", "math"] as Section[]).map((section) => {
+    const pacing = analyseSectionPacing(attempts, section);
+    return { ...pacing, advice: pacingAdvice(pacing, skills) };
+  });
+
+  return { sections, skills, totalTimedAttempts: attempts.length };
 }
