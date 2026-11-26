@@ -190,6 +190,119 @@ const DERIVATIONS: Record<string, () => number> = {
   "geo-trig-007": () => 9 / 12,
   // sector area 6pi in a circle of radius 6
   "geo-circ-007": () => ((6 * Math.PI) / (Math.PI * 6 ** 2)) * 360,
+
+  // --- batch four: algebra ------------------------------------------------
+  // 7 - 2(x + 1) = 3x - 8
+  "alg-lin1-007": () => solveLinear(-2, 7 - 2, 3, -8),
+  // 5(x - 2) = ax - 10 identical for all x
+  "alg-lin1-008": () => 5,
+  // 3.50 + 1.20m = 17.90
+  "alg-lin1-009": () => (17.9 - 3.5) / 1.2,
+  // (x + 9)/4 - (x - 3)/6 = 2, cleared by 12
+  "alg-lin1-011": () => solveLinear(3 - 2, 27 + 6, 0, 24),
+  // 0.4(x - 5) = 0.25x + 1
+  "alg-lin1-012": () => solveLinear(0.4, -2, 0.25, 1),
+  // (1, 9) and (5, 1): y-intercept
+  "alg-lin2-007": () => 9 - slope(1, 9, 5, 1) * 1,
+  // 5x - 2y = 20 at x = 0
+  "alg-lin2-009": () => 20 / -2,
+  // slope 3 through (-2, 1): x-intercept
+  "alg-lin2-010": () => {
+    const b = 1 - 3 * -2;
+    return -b / 3;
+  },
+  // (0, 4) and (6, 4)
+  "alg-lin2-011": () => slope(0, 4, 6, 4),
+  // perpendicular to slope 2/5 through the origin, at x = 10
+  "alg-lin2-012": () => -1 / (2 / 5) * 10,
+  // 4x - 11 = 25
+  "alg-linf-007": () => (25 + 11) / 4,
+  // table x 2,5,8,11 -> f 17,11,5,-1; f(0)
+  "alg-linf-009": () => 17 - slope(2, 17, 5, 11) * 2,
+  // h(-1) = 8, h(3) = -4; h(5)
+  "alg-linf-010": () => {
+    const m = slope(-1, 8, 3, -4);
+    return 8 + m * (5 - -1);
+  },
+  // 4 GB cost 22, 9 GB cost 32; fixed fee
+  "alg-linf-011": () => 22 - 4 * slope(4, 22, 9, 32),
+  // 3x + 4y = 25 and 3x - 2y = 7; y
+  "alg-sys-007": () => (25 - 7) / (4 - -2),
+  // 2x + 3y = 18 and 5x - y = 11; x + y
+  "alg-sys-008": () => {
+    const x = (18 + 3 * 11) / (2 + 3 * 5);
+    return x + (5 * x - 11);
+  },
+  // 11 items, 1560 pence, pens 80 notebooks 250
+  "alg-sys-009": () => (1560 - 11 * 80) / (250 - 80),
+  // y = 2x - 1 meets y = -x + 8; sum of coordinates
+  "alg-sys-011": () => {
+    const x = (8 + 1) / (2 + 1);
+    return x + (2 * x - 1);
+  },
+  // 4x + ky = 20 parallel to 2x + 5y = 9
+  "alg-sys-012": () => (4 / 2) * 5,
+  // mean of at least 80 over four tests, three known
+  "alg-ineq-008": () => 80 * 4 - (72 + 85 + 78),
+  // 340 + 26p <= 1200
+  "alg-ineq-010": () => Math.floor((1200 - 340) / 26),
+  // 7x - 4 >= 2x + 26, least integer
+  "alg-ineq-012": () => Math.ceil((26 + 4) / (7 - 2)),
+
+  // --- batch four: advanced math -------------------------------------------
+  // (x + 5)^2 = x^2 + bx + 25
+  "adv-equiv-015": () => 2 * 5,
+  // x^2 - 14x + 40 = (x - 7)^2 + k
+  "adv-equiv-016": () => 40 - (14 / 2) ** 2,
+  // 3(x^2 - 4x) = 3(x - 2)^2 + c
+  "adv-equiv-019": () => 3 * -((4 / 2) ** 2),
+  // (x - 6)^2 = 49, negative root
+  "adv-nleq-011": () => 6 - 7,
+  // product of roots of x^2 - 3x - 28
+  "adv-nleq-012": () => quadraticRoots(1, -3, -28).reduce((p, r) => p * r, 1),
+  // 3x^2 = 12x, greatest root
+  "adv-nleq-013": () => Math.max(...quadraticRoots(3, -12, 0)),
+  // x^2 + kx + 25 with no real roots, greatest integer k
+  "adv-nleq-014": () => {
+    let greatest = -Infinity;
+    for (let k = -50; k <= 50; k += 1) if (k * k - 100 < 0) greatest = k;
+    return greatest;
+  },
+  // y = x^2 - 4 meets y = 3x; sum of x
+  "adv-nleq-015": () => quadraticRoots(1, -3, -4).reduce((s, r) => s + r, 0),
+  // sqrt(2x + 7) = 5
+  "adv-nleq-016": () => (25 - 7) / 2,
+  // x^2 + y^2 = 58, x + y = 10; xy
+  "adv-nleq-017": () => (10 ** 2 - 58) / 2,
+  // positive root of x^2 - 2x - 15
+  "adv-nleq-019": () => Math.max(...quadraticRoots(1, -2, -15)),
+  // difference of the roots of 2x^2 - 11x + 12
+  "adv-nleq-020": () => {
+    const [low, high] = quadraticRoots(2, -11, 12);
+    return high! - low!;
+  },
+  // minimum of x^2 - 8x + 12
+  "adv-nlfn-011": () => {
+    const vertex = 8 / 2;
+    return vertex ** 2 - 8 * vertex + 12;
+  },
+  // 2000 at 8% for 3 years
+  "adv-nlfn-012": () => Math.round(2000 * 1.08 ** 3),
+  // minimum of (x + 3)(x - 7)
+  "adv-nlfn-013": () => {
+    const vertex = (-3 + 7) / 2;
+    return (vertex + 3) * (vertex - 7);
+  },
+  // vertex x of 2x^2 - 12x + 23
+  "adv-nlfn-015": () => 12 / (2 * 2),
+  // x^2 + bx + 9 tangent to the x-axis, b negative
+  "adv-nlfn-016": () => -Math.sqrt(4 * 9),
+  // 250 g remaining after 2 hours of 20% hourly decay
+  "adv-nlfn-018": () => Math.round(250 / 0.8 ** 2),
+  // maximum of -(x - 4)^2 + 11
+  "adv-nlfn-019": () => 11,
+  // x^2 - 6x + k has minimum -4
+  "adv-nlfn-020": () => -4 + (6 / 2) ** 2,
 };
 
 describe("maths answers are independently verifiable", () => {
@@ -217,10 +330,14 @@ describe("maths answers are independently verifiable", () => {
       for (const stored of accepted) {
         const value = evaluateNumeric(normaliseAnswer(stored));
         expect(value, `${id}: stored answer "${stored}" is not numeric`).not.toBeNull();
+        // The digital SAT accepts a value rounded or truncated to three
+        // decimal places, so a stored decimal form of an exact fraction is
+        // correct even though it is not bit-identical. Anything beyond that
+        // tolerance is a genuine error, not a rounding choice.
         expect(
           Math.abs((value as number) - expected),
           `${id}: stored "${stored}" but derivation gives ${expected}`,
-        ).toBeLessThan(1e-9);
+        ).toBeLessThan(1e-3);
       }
 
       // And the derived value must be accepted by the grader a student hits.
@@ -262,7 +379,10 @@ describe("maths distractors are genuinely wrong", () => {
         .filter((v): v is number => v !== null);
       if (values.length < 2) continue;
       const first = values[0]!;
-      if (values.some((v) => Math.abs(v - first) > 1e-9)) inconsistent.push(question.id);
+      // Equivalent forms may differ only by three-decimal rounding. A larger
+      // gap means two genuinely different answers are both being accepted,
+      // which would mark a wrong answer correct.
+      if (values.some((v) => Math.abs(v - first) > 1e-3)) inconsistent.push(question.id);
     }
     expect(inconsistent).toEqual([]);
   });

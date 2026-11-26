@@ -1,8 +1,10 @@
 import { SeedQuestionSchema, type SeedQuestion } from "../types";
 import { ALGEBRA_QUESTIONS } from "./math-algebra";
 import { ALGEBRA_QUESTIONS_2 } from "./math-algebra-2";
+import { ALGEBRA_QUESTIONS_3 } from "./math-algebra-3";
 import { ADVANCED_MATH_QUESTIONS } from "./math-advanced";
 import { ADVANCED_MATH_QUESTIONS_2 } from "./math-advanced-2";
+import { ADVANCED_MATH_QUESTIONS_3 } from "./math-advanced-3";
 import { DATA_ANALYSIS_QUESTIONS } from "./math-data";
 import { DATA_GEOMETRY_QUESTIONS_2 } from "./math-data-2";
 import { GEOMETRY_QUESTIONS } from "./math-geometry";
@@ -15,8 +17,10 @@ import { RW_WRITING_QUESTIONS_2 } from "./rw-writing-2";
 export const ALL_SEED_QUESTIONS: SeedQuestion[] = [
   ...ALGEBRA_QUESTIONS,
   ...ALGEBRA_QUESTIONS_2,
+  ...ALGEBRA_QUESTIONS_3,
   ...ADVANCED_MATH_QUESTIONS,
   ...ADVANCED_MATH_QUESTIONS_2,
+  ...ADVANCED_MATH_QUESTIONS_3,
   ...DATA_ANALYSIS_QUESTIONS,
   ...DATA_GEOMETRY_QUESTIONS_2,
   ...GEOMETRY_QUESTIONS,
@@ -52,8 +56,10 @@ export function validateSeedQuestions(questions: SeedQuestion[] = ALL_SEED_QUEST
 export {
   ALGEBRA_QUESTIONS,
   ALGEBRA_QUESTIONS_2,
+  ALGEBRA_QUESTIONS_3,
   ADVANCED_MATH_QUESTIONS,
   ADVANCED_MATH_QUESTIONS_2,
+  ADVANCED_MATH_QUESTIONS_3,
   DATA_ANALYSIS_QUESTIONS,
   DATA_GEOMETRY_QUESTIONS_2,
   GEOMETRY_QUESTIONS,
