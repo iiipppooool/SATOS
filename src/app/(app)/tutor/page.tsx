@@ -3,6 +3,9 @@ import { prisma } from "@/lib/db";
 import { providerStatuses } from "@/lib/ai";
 import { getQuestionView } from "@/lib/question-view";
 import { TutorConsole } from "./console";
+import { TutorGenerator, type GeneratorSkill } from "./generator";
+import { getWeaknesses } from "@/lib/queries";
+import { SECTION_LABEL } from "@/lib/domain/enums";
 import { Notice, SectionHeading } from "@/components/ui";
 import type { AiProvider } from "@/lib/domain/enums";
 
@@ -22,7 +25,7 @@ export default async function TutorPage({
   const active = statuses.find((s) => s.provider === current);
   const configured = Boolean(active?.configured) && current !== "none" && user.settings.aiEnabled;
 
-  const [question, threads, thread] = await Promise.all([
+  const [question, threads, thread, weaknesses] = await Promise.all([
     params.question ? getQuestionView(params.question) : Promise.resolve(null),
     prisma.tutorThread.findMany({
       where: { userId: user.id },
@@ -36,7 +39,21 @@ export default async function TutorPage({
           include: { messages: { orderBy: { createdAt: "asc" } } },
         })
       : Promise.resolve(null),
+    getWeaknesses(user.id, user.settings.targetScore),
   ]);
+
+  // Offer the highest-value skills first; the generator is most useful aimed
+  // at a real gap rather than at whatever is alphabetically first.
+  const generatorSkills: GeneratorSkill[] = weaknesses
+    .slice(0, 16)
+    .map((w) => ({
+      id: w.skillId,
+      name: w.skillName,
+      section: SECTION_LABEL[w.section],
+      accuracy: w.recentAccuracy,
+      attempts: w.attempts,
+      expectedGain: w.expectedGain,
+    }));
 
   return (
     <div className="space-y-6">
@@ -70,6 +87,12 @@ export default async function TutorPage({
         when it generates one. Treat a generated answer key as unverified until you have checked
         the reasoning yourself.
       </Notice>
+
+      <TutorGenerator
+        enabled={configured}
+        skills={generatorSkills}
+        providerLabel={active?.label ?? current}
+      />
 
       <TutorConsole
         enabled={configured}

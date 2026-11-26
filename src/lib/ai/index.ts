@@ -56,3 +56,4 @@ export async function complete(
 
 export * from "./types";
 export * from "./prompts";
+export * from "./generation";
