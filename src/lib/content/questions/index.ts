@@ -4,6 +4,7 @@ import { ALGEBRA_QUESTIONS_2 } from "./math-algebra-2";
 import { ADVANCED_MATH_QUESTIONS } from "./math-advanced";
 import { ADVANCED_MATH_QUESTIONS_2 } from "./math-advanced-2";
 import { DATA_ANALYSIS_QUESTIONS } from "./math-data";
+import { DATA_GEOMETRY_QUESTIONS_2 } from "./math-data-2";
 import { GEOMETRY_QUESTIONS } from "./math-geometry";
 import { GEOMETRY_QUESTIONS_2 } from "./math-geometry-2";
 import { RW_READING_QUESTIONS } from "./rw-reading";
@@ -17,6 +18,7 @@ export const ALL_SEED_QUESTIONS: SeedQuestion[] = [
   ...ADVANCED_MATH_QUESTIONS,
   ...ADVANCED_MATH_QUESTIONS_2,
   ...DATA_ANALYSIS_QUESTIONS,
+  ...DATA_GEOMETRY_QUESTIONS_2,
   ...GEOMETRY_QUESTIONS,
   ...GEOMETRY_QUESTIONS_2,
   ...RW_READING_QUESTIONS,
@@ -53,6 +55,7 @@ export {
   ADVANCED_MATH_QUESTIONS,
   ADVANCED_MATH_QUESTIONS_2,
   DATA_ANALYSIS_QUESTIONS,
+  DATA_GEOMETRY_QUESTIONS_2,
   GEOMETRY_QUESTIONS,
   GEOMETRY_QUESTIONS_2,
   RW_READING_QUESTIONS,

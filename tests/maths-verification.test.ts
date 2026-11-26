@@ -151,6 +151,45 @@ const DERIVATIONS: Record<string, () => number> = {
   },
   // radius from (-1, 4) to (3, 7)
   "geo-circ-004": () => Math.hypot(3 - -1, 7 - 4),
+
+  // --- batch three -------------------------------------------------------
+  // 150 g for 12 biscuits, scaled to 30
+  "psda-ratio-003": () => (150 / 12) * 30,
+  // 8 cm at 1:25000, in km
+  "psda-ratio-004": () => (8 * 25000) / 100 / 1000,
+  // 4500 -> 5940 percentage increase
+  "psda-pct-003": () => ((5940 - 4500) / 4500) * 100,
+  // mean minus median of 3, 7, 7, 9, 14
+  "psda-1var-003": () => {
+    const data = [3, 7, 7, 9, 14];
+    const mean = data.reduce((s, v) => s + v, 0) / data.length;
+    const med = data[Math.floor(data.length / 2)]!;
+    return mean - med;
+  },
+  // y = 7 + 2.5x at x = 12
+  "psda-2var-003": () => 7 + 2.5 * 12,
+  // residual: observed 45, predicted 3(12) + 5
+  "psda-2var-004": () => 45 - (3 * 12 + 5),
+  // 135 of 150 treated seedlings survived
+  "psda-prob-004": () => 135 / 150,
+  // cube of volume 64: surface area
+  "geo-vol-005": () => 6 * Math.cbrt(64) ** 2,
+  // all three dimensions scaled by 3
+  "geo-vol-007": () => 3 ** 3,
+  // angles in ratio 3:4:5, smallest
+  "geo-lines-004": () => (180 / (3 + 4 + 5)) * 3,
+  // isosceles with a 40 degree apex
+  "geo-lines-005": () => (180 - 40) / 2,
+  // similar triangles 2:5, smaller area 12
+  "geo-lines-007": () => 12 * (5 / 2) ** 2,
+  // legs 5 and 12
+  "geo-trig-004": () => Math.hypot(5, 12),
+  // hypotenuse 20, leg 16
+  "geo-trig-005": () => Math.sqrt(20 ** 2 - 16 ** 2),
+  // tan A with opposite 9, adjacent 12
+  "geo-trig-007": () => 9 / 12,
+  // sector area 6pi in a circle of radius 6
+  "geo-circ-007": () => ((6 * Math.PI) / (Math.PI * 6 ** 2)) * 360,
 };
 
 describe("maths answers are independently verifiable", () => {
