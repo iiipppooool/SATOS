@@ -27,34 +27,27 @@ multi-user from the start, so it can become a shared product without a rewrite.
 
 ## Quick start
 
+Needs Node 20.9 or newer. Check with `node -v`; if you have not got it, install
+the LTS build from [nodejs.org](https://nodejs.org).
+
 ```bash
 npm install
 ```
 
 ```bash
-cp .env.example .env
-```
-
-Generate a session secret and paste it into `AUTH_SECRET` in `.env`:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
-```
-
-Create the database and load the question bank:
-
-```bash
 npm run setup
 ```
-
-Start the dev server:
 
 ```bash
 npm run dev
 ```
 
-Then open http://localhost:3000 and create your account. Signup closes
-automatically once one account exists, unless `ALLOW_SIGNUP=true` is set.
+Then open http://localhost:3000 and create your account.
+
+`npm run setup` creates `.env` with a freshly generated `AUTH_SECRET`, creates
+the SQLite database, and loads all 173 questions. It never overwrites an
+existing `.env`. Signup closes automatically once one account exists, unless
+`ALLOW_SIGNUP=true` is set.
 
 ### Scripts
 
@@ -66,7 +59,8 @@ automatically once one account exists, unless `ALLOW_SIGNUP=true` is set.
 | `npm test` | Unit tests |
 | `npm run typecheck` | TypeScript, no emit |
 | `npm run lint` | ESLint |
-| `npm run setup` | Generate client, create the database, seed it |
+| `npm run setup` | Create `.env`, generate the client, create the database, seed it |
+| `npm run setup:env` | Create `.env` only, if it does not already exist |
 | `npm run db:studio` | Browse the database |
 | `npm run db:reset` | Drop everything and reseed |
 
