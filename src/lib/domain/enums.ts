@@ -224,6 +224,17 @@ export const DISTRACTOR_TYPE_LABEL: Record<string, string> = {
   misplaced_modifier: "Misplaced modifier",
   tense_shift: "Unnecessary tense shift",
   redundant: "Redundant",
+  run_on: "Creates a run-on sentence",
+  unnecessary_comma: "Unnecessary comma",
+  possessive_error: "Possessive or apostrophe error",
+  parallelism_error: "Breaks parallel structure",
+  comparison_error: "Illogical or incomplete comparison",
+  essential_clause: "Punctuates an essential clause as if optional",
+  pronoun_case: "Wrong pronoun case",
+  number_agreement: "Singular and plural do not match",
+  wrong_idiom: "Non-standard idiom or preposition",
+  circular: "Restates the claim instead of supporting it",
+  subject_verb_split: "Separates the subject from its verb",
 };
 
 /** Narrow a database string to a validated union, falling back safely. */

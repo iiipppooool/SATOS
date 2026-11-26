@@ -97,9 +97,11 @@ The original brief for this project asked for September, October and November
 forms, and the reconstructions circulating online are both copyright
 infringements and unreliable as answer keys. What exists instead:
 
-- **85 questions written for this platform**, covering all 30 skills across all
-  8 content domains, each with full pattern metadata and a rationale for every
-  wrong option.
+- **173 questions written for this platform** (85 Reading and Writing, 88
+  Maths), covering all 30 skills across all 8 content domains, each with full
+  pattern metadata and a rationale for every wrong option. That is enough for a
+  complete 98-question adaptive exam with no repeats, with spare capacity on
+  top.
 - **An import pipeline** for material you already hold a licence to, which
   keeps provenance attached and never silently upgrades it. An item imported as
   "recalled, unverified" stays labelled that way everywhere it appears,
@@ -195,11 +197,17 @@ as coloured, so identity never rests on hue alone.
 
 ## Testing
 
-208 unit tests cover the domain logic: score estimation, spaced repetition,
+254 unit tests cover the domain logic: score estimation, spaced repetition,
 weakness ranking, adaptive selection, plan generation, exam blueprint and
 routing, answer grading, and import validation. The whole question bank is
-validated in CI, so a malformed question fails the build rather than reaching
-a study session.
+validated too, so a malformed question fails the build rather than reaching a
+study session.
+
+Every computable maths answer is **independently re-derived in code** by
+`tests/maths-verification.test.ts`, which recomputes the result from the
+question's own numbers and compares it with the stored answer key. A typo in an
+answer fails the suite by name. This matters more than it sounds: a wrong
+answer key that a student trusts actively teaches the wrong method.
 
 ```bash
 npm test

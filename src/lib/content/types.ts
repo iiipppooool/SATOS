@@ -11,6 +11,11 @@ import { z } from "zod";
 
 export const SeedChoiceSchema = z.object({
   label: z.enum(["A", "B", "C", "D"]),
+  /**
+   * Never empty. Punctuation questions whose answer is "insert nothing here"
+   * must spell that out as the literal string "no punctuation", otherwise the
+   * option renders as a blank row that the student cannot read or click.
+   */
   text: z.string().min(1),
   isCorrect: z.boolean().default(false),
   /** Why a student lands here. Keys match DISTRACTOR_TYPE_LABEL. */

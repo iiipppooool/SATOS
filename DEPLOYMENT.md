@@ -154,10 +154,13 @@ harder second module is not published. The simulator uses two-thirds of the
 first module, which is where most published analyses land. It is a single
 constant in `src/lib/domain/exam.ts`.
 
-**The bank is small for full-length exams.** A real sitting needs 54 Reading
-and Writing questions and 44 Maths questions. A fresh instance has 85 in total,
-so a full mock will have short modules and some repeats. The simulator warns
-you when this is the case. Import your own material to fix it.
+**Repeated full exams will overlap.** A fresh instance holds 173 questions, 85
+Reading and Writing and 88 Maths, which is enough for a complete 98-question
+adaptive exam with no repeats within it, verified end to end. Two full exams
+taken back to back do share roughly half their questions, though, because 98 of
+173 is most of the bank. If you plan to sit several timed mocks, import more
+material first. The simulator warns you if the bank ever drops below what a
+full section needs.
 
 **Score estimates are not predictions.** See the README for how the estimate is
 produced and why the confidence band never collapses.

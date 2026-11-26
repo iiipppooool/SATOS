@@ -151,7 +151,14 @@ export default async function ExamRunPage({
     .map((m) => ({ label: moduleLabel(m.slot), tier: m.tier }));
 
   return (
+    /*
+     * key = module id. Without it React reuses the component instance when the
+     * page re-renders onto the next module, so `started`, the countdown and the
+     * answer map all survive from the previous module: module two would skip
+     * its own intro screen and inherit module one's expired clock.
+     */
     <ExamRunner
+      key={current.id}
       examId={exam.id}
       moduleId={current.id}
       moduleLabel={moduleLabel(current.slot)}
