@@ -13,6 +13,7 @@ import { RW_READING_QUESTIONS } from "./rw-reading";
 import { RW_READING_QUESTIONS_2 } from "./rw-reading-2";
 import { RW_WRITING_QUESTIONS } from "./rw-writing";
 import { RW_WRITING_QUESTIONS_2 } from "./rw-writing-2";
+import { RW_WRITING_QUESTIONS_3 } from "./rw-writing-3";
 
 export const ALL_SEED_QUESTIONS: SeedQuestion[] = [
   ...ALGEBRA_QUESTIONS,
@@ -29,6 +30,7 @@ export const ALL_SEED_QUESTIONS: SeedQuestion[] = [
   ...RW_READING_QUESTIONS_2,
   ...RW_WRITING_QUESTIONS,
   ...RW_WRITING_QUESTIONS_2,
+  ...RW_WRITING_QUESTIONS_3,
 ];
 
 /**
@@ -68,4 +70,5 @@ export {
   RW_READING_QUESTIONS_2,
   RW_WRITING_QUESTIONS,
   RW_WRITING_QUESTIONS_2,
+  RW_WRITING_QUESTIONS_3,
 };
