@@ -3,67 +3,53 @@
 The app runs anywhere Next.js 16 runs. These notes cover the path most people
 want: Vercel for hosting, a managed Postgres for data.
 
-SQLite is fine for local use, but not for a deployment: most hosts have an
-ephemeral filesystem, so a SQLite file is wiped on every redeploy.
+SQLite is fine for local use but not for a deployment: Vercel's filesystem is
+read-only apart from a scratch directory, and it is thrown away on every
+redeploy, so a SQLite file there would lose every answer you had logged.
+
+**There is no code to change.** The schema deliberately avoids native enums and
+scalar list columns, so the same models run on both engines, and the driver
+adapter and the datasource provider are both chosen from the shape of
+`DATABASE_URL`:
+
+- `file:./prisma/dev.db` → SQLite, through `@prisma/adapter-better-sqlite3`
+- `postgresql://…` → Postgres, through `@prisma/adapter-pg`
+
+`scripts/set-db-provider.mjs` writes the matching `provider` into
+`prisma/schema.prisma` before `prisma generate` runs, because Prisma will only
+read that one value from the schema file. It runs from `postinstall`, `build`
+and `setup`, so it is never something you have to remember.
 
 ---
 
-## 1. Switch the database to Postgres
+## 1. Create the database
 
-Two changes, and no model edits — the schema deliberately avoids native enums
-and scalar lists so it is portable as written.
+Any Postgres works. Neon, Supabase and Vercel Postgres all have a free tier.
 
-**`prisma/schema.prisma`**
+Take the **pooled** connection string, not the direct one: serverless functions
+open a connection per invocation and will exhaust a direct limit quickly.
 
-```prisma
-datasource db {
-  provider = "postgresql"
-}
-```
+- **Neon** — the default string already points at the pooler
+  (`…-pooler.…neon.tech`).
+- **Supabase** — Connect → *Connection pooling*, port `6543`.
+- **Vercel Postgres** — use `POSTGRES_PRISMA_URL`.
 
-**`src/lib/db.ts`** — swap the driver adapter:
-
-```ts
-import { PrismaPg } from "@prisma/adapter-pg";
-
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
-```
-
-Then install the adapter and drop the SQLite one:
-
-```bash
-npm install @prisma/adapter-pg && npm uninstall @prisma/adapter-better-sqlite3 better-sqlite3
-```
+Make sure it ends with `?sslmode=require`. Managed providers all require TLS,
+and `node-postgres` verifies the certificate properly when you ask for it
+through the connection string.
 
 ---
 
-## 2. Create the database
+## 2. Set the environment variables
 
-Any Postgres works. Supabase, Neon and Vercel Postgres are all one-click.
-
-If you use **Supabase**, take the *connection pooling* string for
-`DATABASE_URL` and the direct string for migrations. Add the direct URL to
-`prisma.config.ts`:
-
-```ts
-datasource: {
-  url: env("DATABASE_URL"),
-  directUrl: env("DIRECT_DATABASE_URL"),
-},
-```
-
----
-
-## 3. Environment variables
-
-Set these on the host. Everything except the first two is optional.
+On Vercel: Project → Settings → Environment Variables. Only the first two are
+required.
 
 | Variable | Required | What it is |
 |---|---|---|
-| `DATABASE_URL` | yes | Postgres connection string |
+| `DATABASE_URL` | yes | Pooled Postgres connection string |
 | `AUTH_SECRET` | yes | 32+ random bytes; signs the session cookie |
-| `DIRECT_DATABASE_URL` | if pooling | Direct connection, for migrations |
-| `ALLOW_SIGNUP` | no | `true` opens signup; remove it once your account exists |
+| `ALLOW_SIGNUP` | first deploy | `true` opens the one-time signup page; remove it afterwards |
 | `ANTHROPIC_API_KEY` | no | Enables the AI tutor on Anthropic |
 | `OPENAI_API_KEY` | no | Enables the AI tutor on OpenAI |
 | `ANTHROPIC_MODEL` / `OPENAI_MODEL` | no | Override the default model |
@@ -77,36 +63,57 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 **Rotating `AUTH_SECRET` invalidates every existing session.** That is the
 intended way to sign everyone out.
 
+Set all of them for Production *and* Preview if you want preview deployments to
+work, and give previews their own database unless you want them writing to your
+real attempt history.
+
 ---
 
-## 4. Regenerate the baseline migration, then run it
+## 3. Deploy
 
-The committed baseline in `prisma/migrations/0_init` is **SQLite dialect**,
-because that is what local development uses. It will not run on Postgres, so
-regenerate it after changing the provider in step 1:
+Import the GitHub repository on Vercel and deploy. Every default is correct:
+the framework is detected as Next.js, and because `package.json` contains a
+`vercel-build` script, Vercel runs that instead of `build`:
 
-```bash
-rm -rf prisma/migrations/0_init
+```
+node scripts/set-db-provider.mjs   # provider = postgresql
+prisma generate
+prisma db push                     # create or update the tables
+npm run db:seed                    # taxonomy + question bank, idempotent
+next build
 ```
 
-```bash
-mkdir -p prisma/migrations/0_init && npx prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > prisma/migrations/0_init/migration.sql
-```
+So the first deploy creates the schema and loads all 291 questions by itself,
+and later deploys bring the bank up to date with whatever is in the repository.
+The seed only ever upserts; it does not touch user accounts or attempt history.
 
-Then apply it, pointed at the production database:
+If you would rather keep migrations out of the build, delete the
+`vercel-build` script and run this once from your machine instead:
 
 ```bash
-DATABASE_URL="<your production url>" npx prisma migrate deploy
+DATABASE_URL="<your production url>" npm run db:push
 ```
 
 ```bash
 DATABASE_URL="<your production url>" npm run db:seed
 ```
 
-The seed is idempotent: it upserts the taxonomy and the question bank, and it
-will not touch an existing user account.
+> The committed baseline in `prisma/migrations/0_init` is SQLite dialect,
+> because that is what local development uses. Deployment uses `prisma db push`,
+> which reads the schema and ignores the migrations directory, so the dialect
+> mismatch does not matter. If you want a real Postgres migration history,
+> regenerate the baseline with `prisma migrate diff` against a Postgres
+> provider and use `prisma migrate deploy` instead.
 
-To create the owner account from the seed instead of through the signup page:
+---
+
+## 4. Create your account
+
+Visit `/signup` on the deployed URL while `ALLOW_SIGNUP` is set. The route
+refuses to run once any user exists, so there is no race to win, but remove the
+variable afterwards anyway and redeploy.
+
+To create the account from the seed instead:
 
 ```bash
 SEED_OWNER_EMAIL="you@example.com" SEED_OWNER_PASSWORD="a-long-password" npm run db:seed
@@ -114,23 +121,10 @@ SEED_OWNER_EMAIL="you@example.com" SEED_OWNER_PASSWORD="a-long-password" npm run
 
 ---
 
-## 5. Deploy
-
-```bash
-npx vercel --prod
-```
-
-`npm run build` runs `prisma generate` first, and `postinstall` runs it too, so
-the client is always generated against the current schema on the host.
-
-After the first successful deploy, **remove `ALLOW_SIGNUP`** so nobody else can
-create an account on your instance.
-
----
-
 ## Checklist before you call it done
 
 - [ ] `AUTH_SECRET` is set and is not the example value
+- [ ] `DATABASE_URL` is the *pooled* string and ends with `?sslmode=require`
 - [ ] `ALLOW_SIGNUP` is removed once your account exists
 - [ ] You can sign in, run a drill, and see the dashboard update
 - [ ] `npm test`, `npm run typecheck` and `npm run lint` all pass
@@ -154,13 +148,12 @@ harder second module is not published. The simulator uses two-thirds of the
 first module, which is where most published analyses land. It is a single
 constant in `src/lib/domain/exam.ts`.
 
-**Repeated full exams will overlap.** A fresh instance holds 173 questions, 85
-Reading and Writing and 88 Maths, which is enough for a complete 98-question
-adaptive exam with no repeats within it, verified end to end. Two full exams
-taken back to back do share roughly half their questions, though, because 98 of
-173 is most of the bank. If you plan to sit several timed mocks, import more
-material first. The simulator warns you if the bank ever drops below what a
-full section needs.
+**Repeated full exams still overlap.** A fresh instance holds 291 questions,
+115 Reading and Writing and 176 Maths, which is enough for a complete
+98-question adaptive exam with no repeats inside it, verified end to end. Two
+full exams back to back share some material, because a single exam uses about a
+third of the bank. Import or generate more before sitting several timed mocks.
+The simulator warns you if the bank ever drops below what a full section needs.
 
 **Score estimates are not predictions.** See the README for how the estimate is
 produced and why the confidence band never collapses.

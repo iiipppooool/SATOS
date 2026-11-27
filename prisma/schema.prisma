@@ -2,9 +2,11 @@
 //
 // Portability note: this schema deliberately avoids native enums and scalar
 // list columns so that the *same* file works on SQLite (zero-config local dev)
-// and on PostgreSQL / Supabase in production. To move to Postgres, change the
-// provider below to "postgresql", swap the driver adapter in src/lib/db.ts,
-// and point DATABASE_URL at your instance -- no model changes are required.
+// and on PostgreSQL / Supabase in production. To move to Postgres, point
+// DATABASE_URL at your instance and nothing else: the provider line below is
+// rewritten to match by scripts/set-db-provider.mjs (Prisma will only read it
+// from this file), and src/lib/prisma-adapter.ts picks the driver adapter from
+// the same URL. No model changes are required.
 //
 // Enum-like columns are plain Strings. SQLite does not enforce enum values at
 // the database level anyway, so the single source of truth for allowed values

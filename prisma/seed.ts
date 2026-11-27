@@ -1,12 +1,14 @@
 import "dotenv/config";
 import { hash } from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { DOMAINS, ALL_SKILLS } from "../src/lib/domain/taxonomy";
+import { createAdapter } from "../src/lib/prisma-adapter";
 import { ALL_SEED_QUESTIONS, validateSeedQuestions } from "../src/lib/content/questions";
 import type { SeedQuestion } from "../src/lib/content/types";
 
-const adapter = new PrismaBetterSqlite3({ url: process.env.DATABASE_URL! });
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error("DATABASE_URL is not set. Run `npm run setup` first.");
+const adapter = createAdapter(url);
 const prisma = new PrismaClient({ adapter });
 
 function json(value: unknown): string | null {

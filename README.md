@@ -45,7 +45,7 @@ npm run dev
 Then open http://localhost:3000 and create your account.
 
 `npm run setup` creates `.env` with a freshly generated `AUTH_SECRET`, creates
-the SQLite database, and loads all 173 questions. It never overwrites an
+the SQLite database, and loads all 291 questions. It never overwrites an
 existing `.env`. Signup closes automatically once one account exists, unless
 `ALLOW_SIGNUP=true` is set.
 
@@ -91,7 +91,7 @@ The original brief for this project asked for September, October and November
 forms, and the reconstructions circulating online are both copyright
 infringements and unreliable as answer keys. What exists instead:
 
-- **173 questions written for this platform** (85 Reading and Writing, 88
+- **291 questions written for this platform** (115 Reading and Writing, 176
   Maths), covering all 30 skills across all 8 content domains, each with full
   pattern metadata and a rationale for every wrong option. That is enough for a
   complete 98-question adaptive exam with no repeats, with spare capacity on
@@ -159,8 +159,14 @@ phrasing rather than on the underlying maths.
 
 ## Deployment
 
-See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for Vercel plus Postgres, including the
-two-line change that switches the database engine.
+Push to GitHub, import the repository on Vercel, set `DATABASE_URL` to a
+Postgres connection string and `AUTH_SECRET` to 32 random bytes. There is no
+code to change: the driver adapter and the Prisma datasource provider are both
+chosen from the shape of `DATABASE_URL`, and the deploy build creates the
+schema and loads the question bank itself.
+
+See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for the full walkthrough, including
+connection pooling and what to do about the SQLite baseline migration.
 
 ---
 
@@ -173,7 +179,10 @@ Prisma 7 with driver adapters · Zod 4 · Recharts · Vitest
   The proxy redirect is a convenience; every page and server action
   independently calls `requireUser`, so it is not the security boundary.
 - **Database** is SQLite locally and Postgres in production from the *same*
-  schema: no native enums and no scalar lists, so nothing has to change.
+  schema: no native enums and no scalar lists, so nothing has to change. The
+  adapter and the provider follow `DATABASE_URL`; only the one in use is
+  loaded, so a Postgres deployment never touches better-sqlite3's native
+  binding.
 - **AI** sits behind one adapter interface. Anthropic and OpenAI ship; adding a
   provider is one file. The whole platform works with AI switched off.
 

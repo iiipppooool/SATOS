@@ -1,14 +1,10 @@
 import { PrismaClient } from "@/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { createAdapter } from "./prisma-adapter";
 
 /**
- * Prisma 7 requires an explicit driver adapter. Swapping database engines is a
- * two-line change here plus the `provider` in prisma/schema.prisma:
- *
- *   import { PrismaPg } from "@prisma/adapter-pg";
- *   const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
- *
- * Nothing else in the application touches the driver.
+ * Prisma 7 requires an explicit driver adapter. Which one is used follows from
+ * DATABASE_URL (see src/lib/prisma-adapter.ts), so moving from the local
+ * SQLite file to Postgres is a change of environment variable, not of code.
  */
 function createClient(): PrismaClient {
   const url = process.env.DATABASE_URL;
@@ -17,9 +13,8 @@ function createClient(): PrismaClient {
       "DATABASE_URL is not set. Copy .env.example to .env and run `npm run setup`.",
     );
   }
-  const adapter = new PrismaBetterSqlite3({ url });
   return new PrismaClient({
-    adapter,
+    adapter: createAdapter(url),
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 }
